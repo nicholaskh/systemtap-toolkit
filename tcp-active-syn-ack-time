@@ -59,16 +59,18 @@ probe kernel.function("tcp_transmit_skb") {
 
     if (dport == $port) {
         if (tcp_state_str == "TCP_SYN_SENT") {
-            if (!collect[saddr, sport, daddr, dport]) {
-                collect[saddr, sport, daddr, dport] = t
+            syn_sent_time = collect[saddr, sport, daddr, dport]
+            if (syn_sent_time) {
+                printf("%s %s:%s -> %s:%s interval %dus\\n", tz_ctime(t/1000000), saddr, sport, daddr, dport, t - syn_sent_time)
             }
+            collect[saddr, sport, daddr, dport] = t
         }
         if (tcp_state_str == "TCP_ESTABLISHED") {
             syn_sent_time = collect[saddr, sport, daddr, dport]
             if (syn_sent_time) {
                 intervals <<< t - syn_sent_time
                 if (t - syn_sent_time > 10000) {
-                    printf("%s interval %dus\\n", tz_ctime(t/1000000), t - syn_sent_time)
+                    printf("%s %s:%s -> %s:%s interval %dus\\n", tz_ctime(t/1000000), saddr, sport, daddr, dport, t - syn_sent_time)
                 }
             }
             delete collect[saddr, sport, daddr, dport]
