@@ -42,7 +42,11 @@ chop $preamble;
 my $stap_src = <<_EOC_;
 $preamble
 
-global collect%, resent%, intervals%
+global collect%, intervals
+
+function output(saddr, sport, daddr, dport, now, syn_sent_time) {
+    printf("%s %-11s:%d -> %-13s:%d interval %dms\\n", tz_ctime(now/1000000), saddr, sport, daddr, dport, (now - syn_sent_time)/1000)
+}
 
 probe kernel.function("tcp_transmit_skb") {
     t = gettimeofday_us()
@@ -58,26 +62,17 @@ probe kernel.function("tcp_transmit_skb") {
 
     if (dport == $port) {
         if (tcp_state_str == "TCP_SYN_SENT") {
-            syn_sent_time = collect[saddr, sport, daddr, dport]
-            if (syn_sent_time) {
-                printf("%s %-14s:%d -> %-14s:%d interval %dus\\n", tz_ctime(t/1000000), saddr, sport, daddr, dport, t - syn_sent_time)
-                resent[saddr, sport, daddr, dport] = 1
-            }
             collect[saddr, sport, daddr, dport] = t
         }
         if (tcp_state_str == "TCP_ESTABLISHED") {
             syn_sent_time = collect[saddr, sport, daddr, dport]
             if (syn_sent_time) {
-                intervals <<< t - syn_sent_time
                 if (t - syn_sent_time > 10000) {
-                    out = sprintf("%s %-14s:%d -> %-14s:%d interval %dus", tz_ctime(t/1000000), saddr, sport, daddr, dport, t - syn_sent_time)
-                    if (resent[saddr, sport, daddr, dport]) {
-                        out = out . "[resent]"
-                    }
+                    output(saddr, sport, daddr, dport, t, syn_sent_time)
                 }
+                intervals <<< t - syn_sent_time
             }
             delete collect[saddr, sport, daddr, dport]
-            delete resent[saddr, sport, daddr, dport]
         }
     }
 }
